@@ -1,0 +1,822 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="theme-color"
+      content="#f3f6fb"
+    />
+    <title>Socket Chat</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        color: var(--text-primary);
+        background: var(--page-bg);
+        font-synthesis: none;
+        text-rendering: optimizeLegibility;
+        --page-bg: #f3f6fb;
+        --page-glow: #e8edff;
+        --surface: #fff;
+        --surface-muted: #f6f8fc;
+        --text-primary: #17233c;
+        --text-secondary: #35425d;
+        --text-muted: #71809a;
+        --text-placeholder: #9aa5b7;
+        --border: #e3e9f2;
+        --panel-border: #e8edf5;
+        --status-bg: #f7f8ff;
+        --status-border: #e7ebfa;
+        --status-text: #58658a;
+        --secondary-text: #4a5872;
+        --secondary-hover-bg: #f8faff;
+        --secondary-hover-border: #cbd4e4;
+        --secondary-hover-text: #263650;
+        --empty-text: #98a3b6;
+        --message-text: #34425e;
+        --primary: #4658d8;
+        --primary-hover: #3748c4;
+      }
+
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --page-bg: #111827;
+        --page-glow: #202b4a;
+        --surface: #1b2537;
+        --surface-muted: #222f44;
+        --text-primary: #edf2fb;
+        --text-secondary: #d3dced;
+        --text-muted: #9aa9c0;
+        --text-placeholder: #8291a8;
+        --border: #3a4961;
+        --panel-border: #2b3950;
+        --status-bg: #202b43;
+        --status-border: #344364;
+        --status-text: #b7c5e4;
+        --secondary-text: #d1d9e8;
+        --secondary-hover-bg: #27354b;
+        --secondary-hover-border: #4a5b76;
+        --secondary-hover-text: #f1f5fc;
+        --empty-text: #9aa9c0;
+        --message-text: #d9e2f1;
+        --primary: #6678f3;
+        --primary-hover: #7a89fa;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-width: 320px;
+        min-height: 100vh;
+        margin: 0;
+        background:
+          radial-gradient(ellipse at 10% 0%, var(--page-glow) 0, transparent 34rem),
+          var(--page-bg);
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .app-shell {
+        width: min(1120px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 48px 0;
+      }
+
+      .app-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 28px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 48px;
+        height: 48px;
+        place-items: center;
+        border-radius: 15px;
+        background: linear-gradient(145deg, #6475f4, #4052d2);
+        box-shadow: 0 8px 18px #4658d83b;
+        color: #fff;
+        font-size: 15px;
+        font-weight: 750;
+        letter-spacing: -0.04em;
+      }
+
+      .eyebrow,
+      .section-label {
+        margin: 0 0 5px;
+        color: var(--primary);
+        font-size: 11px;
+        font-weight: 750;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 0;
+        font-size: 25px;
+        letter-spacing: -0.04em;
+      }
+
+      .header-note {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 14px;
+      }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .theme-toggle {
+        min-height: 38px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text-secondary);
+        white-space: nowrap;
+      }
+
+      .theme-toggle:hover {
+        border-color: var(--secondary-hover-border);
+        background: var(--surface-muted);
+        color: var(--text-primary);
+      }
+
+      .chat-layout {
+        display: grid;
+        grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+        align-items: stretch;
+        gap: 20px;
+      }
+
+      .panel {
+        min-width: 0;
+        border: 1px solid var(--panel-border);
+        border-radius: 20px;
+        background: var(--surface);
+        box-shadow: 0 14px 40px #26375a0d;
+      }
+
+      .room-panel {
+        padding: 25px;
+      }
+
+      .panel-heading {
+        margin-bottom: 25px;
+      }
+
+      h2 {
+        margin-bottom: 7px;
+        font-size: 19px;
+        letter-spacing: -0.025em;
+      }
+
+      .panel-description {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .field-group {
+        display: grid;
+        gap: 9px;
+      }
+
+      .user-hint {
+        min-height: 18px;
+        margin: -1px 0 16px;
+        color: var(--text-muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      label {
+        color: var(--text-secondary);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      input {
+        width: 100%;
+        min-width: 0;
+        height: 44px;
+        padding: 0 13px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        outline: none;
+        background: var(--surface);
+        color: var(--text-primary);
+        transition:
+          border-color 150ms ease,
+          box-shadow 150ms ease;
+      }
+
+      input::placeholder {
+        color: var(--text-placeholder);
+      }
+
+      input:focus {
+        border-color: #7885ee;
+        box-shadow: 0 0 0 3px #4658d81c;
+      }
+
+      button {
+        min-height: 42px;
+        padding: 0 15px;
+        border: 0;
+        border-radius: 10px;
+        background: var(--primary);
+        color: #fff;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 650;
+        transition:
+          background 150ms ease,
+          transform 150ms ease;
+      }
+
+      button:hover {
+        background: var(--primary-hover);
+      }
+
+      button:active {
+        transform: translateY(1px);
+      }
+
+      button:focus-visible {
+        outline: 3px solid #4658d84d;
+        outline-offset: 2px;
+      }
+
+      .join-row,
+      .compose-row {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+
+      .join-row button,
+      .compose-row button {
+        flex: 0 0 auto;
+      }
+
+      .secondary-button {
+        width: 100%;
+        margin-top: 10px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--secondary-text);
+      }
+
+      .secondary-button:hover {
+        border-color: var(--secondary-hover-border);
+        background: var(--secondary-hover-bg);
+        color: var(--secondary-hover-text);
+      }
+
+      .room-status {
+        min-height: 42px;
+        margin: 16px 0 22px;
+        padding: 11px 12px;
+        border: 1px solid var(--status-border);
+        border-radius: 10px;
+        background: var(--status-bg);
+        color: var(--status-text);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .divider {
+        height: 1px;
+        margin: 22px 0;
+        background: var(--border);
+      }
+
+      .room-message-form {
+        display: grid;
+        gap: 12px;
+      }
+
+      .conversation-panel {
+        display: flex;
+        min-height: 570px;
+        flex-direction: column;
+        padding: 25px;
+      }
+
+      .conversation-panel .panel-heading {
+        margin-bottom: 18px;
+      }
+
+      .message-list {
+        display: flex;
+        min-height: 280px;
+        flex: 1;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+        overflow-y: auto;
+        padding: 4px 3px 18px;
+      }
+
+      .message-list:empty::before {
+        display: grid;
+        width: 100%;
+        flex: 1;
+        place-items: center;
+        color: var(--empty-text);
+        content: "Your messages will appear here";
+        font-size: 13px;
+      }
+
+      .message-list p {
+        max-width: min(88%, 560px);
+        margin: 0;
+        padding: 11px 14px;
+        overflow-wrap: anywhere;
+        border: 1px solid var(--panel-border);
+        border-radius: 4px 14px 14px;
+        background: var(--surface-muted);
+        color: var(--message-text);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .message-author {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--primary);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .active-users {
+        margin-bottom: 16px;
+        padding: 13px 14px;
+        border: 1px solid var(--panel-border);
+        border-radius: 12px;
+        background: var(--surface-muted);
+      }
+
+      .active-users-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+
+      .active-users-heading h3 {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .active-users-count {
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+
+      .active-user-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .active-user {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 9px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--surface);
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+
+      .active-user-dot {
+        width: 7px;
+        height: 7px;
+        flex: 0 0 auto;
+        border-radius: 50%;
+        background: #22a06b;
+      }
+
+      .active-user-empty {
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+
+      .message-compose {
+        display: grid;
+        gap: 9px;
+        padding-top: 17px;
+        border-top: 1px solid var(--border);
+      }
+
+      @media (max-width: 720px) {
+        .app-shell {
+          width: min(100% - 28px, 560px);
+          padding: 28px 0;
+        }
+
+        .chat-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .conversation-panel {
+          min-height: 480px;
+        }
+      }
+
+      @media (max-width: 460px) {
+        .app-shell {
+          width: calc(100% - 22px);
+          padding: 20px 0;
+        }
+
+        .app-header {
+          align-items: flex-start;
+          flex-wrap: wrap;
+          margin-bottom: 18px;
+        }
+
+        .header-actions {
+          margin-left: auto;
+        }
+
+        .header-note {
+          display: none;
+        }
+
+        .room-panel,
+        .conversation-panel {
+          padding: 19px;
+        }
+
+        .join-row,
+        .compose-row {
+          align-items: stretch;
+        }
+
+        .join-row button,
+        .compose-row button {
+          padding: 0 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">SC</div>
+          <div>
+            <p class="eyebrow">Real-time messaging</p>
+            <h1>Socket Chat</h1>
+          </div>
+        </div>
+        <div class="header-actions">
+          <p class="header-note">A simple space to chat together.</p>
+          <button
+            id="themeToggle"
+            class="theme-toggle"
+            type="button"
+            aria-label="Use dark theme"
+          >
+            Use dark theme
+          </button>
+        </div>
+      </header>
+
+      <main class="chat-layout">
+        <aside class="panel room-panel" aria-labelledby="roomHeading">
+          <div class="panel-heading">
+            <p class="section-label">Your space</p>
+            <h2 id="roomHeading">Room settings</h2>
+            <p class="panel-description">
+              Choose a room name to join the conversation.
+            </p>
+          </div>
+
+          <div class="field-group">
+            <label for="userNameInput">Your name</label>
+            <input
+              type="text"
+              id="userNameInput"
+              placeholder="Enter your name"
+              maxlength="32"
+              autocomplete="nickname"
+            />
+          </div>
+          <p id="userStatus" class="user-hint" role="status" aria-live="polite">
+            Your name will appear with your messages.
+          </p>
+
+          <div class="field-group">
+            <label for="roomNameInput">Room name</label>
+            <div class="join-row">
+              <input
+                type="text"
+                id="roomNameInput"
+                placeholder="e.g. design-team"
+                maxlength="64"
+                autocomplete="off"
+              />
+              <button id="joinRoomButton" type="button">Join</button>
+            </div>
+          </div>
+
+          <button
+            id="leaveRoomButton"
+            class="secondary-button"
+            type="button"
+          >
+            Leave room
+          </button>
+          <p id="roomStatus" class="room-status" role="status" aria-live="polite">
+            You are not in any room
+          </p>
+
+          <div class="divider" role="presentation"></div>
+
+          <div class="room-message-form">
+            <div class="field-group">
+              <label for="roomMessageInput">Room message</label>
+              <input
+                type="text"
+                id="roomMessageInput"
+                placeholder="Write to your room..."
+                maxlength="1000"
+                autocomplete="off"
+              />
+            </div>
+            <button id="sendRoomMessageButton" type="button">
+              Send to room
+            </button>
+          </div>
+        </aside>
+
+        <section
+          class="panel conversation-panel"
+          aria-labelledby="conversationHeading"
+        >
+          <div class="panel-heading">
+            <p class="section-label">Conversation</p>
+            <h2 id="conversationHeading">Messages</h2>
+            <p class="panel-description">
+              Messages appear here with each sender's name.
+            </p>
+          </div>
+
+          <section class="active-users" aria-labelledby="activeUsersHeading">
+            <div class="active-users-heading">
+              <h3 id="activeUsersHeading">Active users</h3>
+              <span id="activeUsersCount" class="active-users-count">
+                Connecting...
+              </span>
+            </div>
+            <ul
+              id="activeUsersList"
+              class="active-user-list"
+              aria-live="polite"
+              aria-relevant="additions removals"
+            >
+              <li class="active-user-empty">Waiting for connection...</li>
+            </ul>
+          </section>
+
+          <div
+            id="messages"
+            class="message-list"
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions"
+          ></div>
+
+          <div class="message-compose">
+            <label for="messageInput">Message everyone</label>
+            <div class="compose-row">
+              <input
+                type="text"
+                id="messageInput"
+                placeholder="Write a message..."
+                maxlength="1000"
+                autocomplete="off"
+              />
+              <button id="sendButton" type="button">Send</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const themeToggle = document.getElementById("themeToggle");
+      const themeColor = document.querySelector('meta[name="theme-color"]');
+
+      const applyTheme = (theme) => {
+        const isDark = theme === "dark";
+        document.documentElement.dataset.theme = isDark ? "dark" : "light";
+        themeToggle.textContent = isDark ? "Use light theme" : "Use dark theme";
+        themeToggle.setAttribute(
+          "aria-label",
+          isDark ? "Use light theme" : "Use dark theme"
+        );
+        themeColor.content = isDark ? "#111827" : "#f3f6fb";
+      };
+
+      const savedTheme = localStorage.getItem("socket-chat-theme");
+      const prefersDark =
+        window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches;
+      applyTheme(savedTheme || (prefersDark ? "dark" : "light"));
+
+      themeToggle.addEventListener("click", () => {
+        const nextTheme =
+          document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        localStorage.setItem("socket-chat-theme", nextTheme);
+        applyTheme(nextTheme);
+      });
+    </script>
+
+    <script>
+      const socket = io();
+      const userNameInput = document.getElementById("userNameInput");
+      const userStatus = document.getElementById("userStatus");
+      const messagebox = document.getElementById("messageInput");
+      const sendButton = document.getElementById("sendButton");
+      const roomNameInput = document.getElementById("roomNameInput");
+      const joinRoomButton = document.getElementById("joinRoomButton");
+      const leaveRoomButton = document.getElementById("leaveRoomButton");
+      const roomStatus = document.getElementById("roomStatus");
+      const roomMessageInput = document.getElementById("roomMessageInput");
+      const sendRoomMessageButton = document.getElementById(
+        "sendRoomMessageButton"
+      );
+      const messages = document.getElementById("messages");
+      const activeUsersList = document.getElementById("activeUsersList");
+      const activeUsersCount = document.getElementById("activeUsersCount");
+      let roomname = "";
+
+      const displayMessage = (username, message) => {
+        const messageElement = document.createElement("p");
+        const authorElement = document.createElement("span");
+        authorElement.className = "message-author";
+        authorElement.textContent = username;
+        const textElement = document.createElement("span");
+        textElement.textContent = message;
+        messageElement.append(authorElement, textElement);
+        messages.appendChild(messageElement);
+      };
+
+      const getUsername = () => {
+        const username = userNameInput.value.trim();
+        if (!username) {
+          userStatus.textContent = "Enter your name before sending a message.";
+          userNameInput.focus();
+          return "";
+        }
+
+        userStatus.textContent = "Your name will appear with your messages.";
+        socket.emit("set-username", username);
+        return username;
+      };
+
+      const syncUsername = () => {
+        socket.emit("set-username", userNameInput.value.trim());
+      };
+
+      userNameInput.addEventListener("change", syncUsername);
+      socket.on("connect", syncUsername);
+
+      const sendMessage = () => {
+        const username = getUsername();
+        const message = messagebox.value.trim();
+        if (!username || !message) return;
+
+        socket.emit("send-message", { message });
+        displayMessage(username, message);
+        messagebox.value = "";
+      };
+
+      sendButton.addEventListener("click", sendMessage);
+      messagebox.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") sendMessage();
+      });
+
+      joinRoomButton.addEventListener("click", () => {
+        const room = roomNameInput.value.trim();
+        if (!room) {
+          roomStatus.textContent = "Enter a room name to join.";
+          return;
+        }
+
+        if (roomname) socket.emit("leave-room", roomname);
+        socket.emit("join-room", room);
+        roomname = room;
+        roomStatus.textContent = `You are in room ${room}`;
+      });
+
+      leaveRoomButton.addEventListener("click", () => {
+        if (!roomname) return;
+
+        socket.emit("leave-room", roomname);
+        roomname = "";
+        roomStatus.textContent = "You are not in any room";
+      });
+
+      const sendRoomMessage = () => {
+        if (!roomname) {
+          roomStatus.textContent = "Join a room before sending a room message.";
+          return;
+        }
+
+        const username = getUsername();
+        const message = roomMessageInput.value.trim();
+        if (!username || !message) return;
+
+        socket.emit("room-message", { room: roomname, message });
+        displayMessage(username, message);
+        roomMessageInput.value = "";
+      };
+
+      sendRoomMessageButton.addEventListener("click", sendRoomMessage);
+      roomMessageInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") sendRoomMessage();
+      });
+
+      socket.on("Message received:", ({ username, message }) => {
+        displayMessage(username, message);
+      });
+
+      socket.on("room-message", ({ username, message }) => {
+        displayMessage(username, message);
+      });
+
+      socket.on("active-users", (usernames) => {
+        const users = Array.isArray(usernames) ? usernames : [];
+        activeUsersCount.textContent = `${users.length} online`;
+        activeUsersList.replaceChildren();
+
+        if (users.length === 0) {
+          const emptyItem = document.createElement("li");
+          emptyItem.className = "active-user-empty";
+          emptyItem.textContent = "No users are online.";
+          activeUsersList.appendChild(emptyItem);
+          return;
+        }
+
+        users.forEach((username) => {
+          const userItem = document.createElement("li");
+          userItem.className = "active-user";
+
+          const statusDot = document.createElement("span");
+          statusDot.className = "active-user-dot";
+          statusDot.setAttribute("aria-hidden", "true");
+
+          const userName = document.createElement("span");
+          userName.textContent = username;
+
+          userItem.append(statusDot, userName);
+          activeUsersList.appendChild(userItem);
+        });
+      });
+
+      socket.on("chat-error", (message) => {
+        userStatus.textContent = message;
+      });
+    </script>
+  </body>
+</html>
