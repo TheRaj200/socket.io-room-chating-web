@@ -174,6 +174,20 @@
         gap: 20px;
       }
 
+      .chat-layout.is-setup {
+        grid-template-columns: minmax(280px, 420px);
+        justify-content: center;
+      }
+
+      .chat-layout.is-setup .conversation-panel,
+      .chat-layout.is-setup .chat-only {
+        display: none;
+      }
+
+      .chat-layout:not(.is-setup) .setup-only {
+        display: none;
+      }
+
       .panel {
         min-width: 0;
         border: 1px solid var(--panel-border);
@@ -316,11 +330,6 @@
         height: 1px;
         margin: 22px 0;
         background: var(--border);
-      }
-
-      .room-message-form {
-        display: grid;
-        gap: 12px;
       }
 
       .conversation-panel {
@@ -520,13 +529,13 @@
         </div>
       </header>
 
-      <main class="chat-layout">
+      <main id="chatLayout" class="chat-layout is-setup">
         <aside class="panel room-panel" aria-labelledby="roomHeading">
           <div class="panel-heading">
             <p class="section-label">Your space</p>
             <h2 id="roomHeading">Room settings</h2>
             <p class="panel-description">
-              Choose a room name to join the conversation.
+              Enter your name and a room name to open the chat.
             </p>
           </div>
 
@@ -560,47 +569,21 @@
 
           <button
             id="leaveRoomButton"
-            class="secondary-button"
+            class="secondary-button chat-only"
             type="button"
           >
             Leave room
           </button>
           <p id="roomStatus" class="room-status" role="status" aria-live="polite">
-            You are not in any room
+            Enter your name and room name to join
           </p>
 
-          <div class="divider" role="presentation"></div>
+          <div class="divider chat-only" role="presentation"></div>
 
-          <div class="room-message-form">
-            <div class="field-group">
-              <label for="roomMessageInput">Room message</label>
-              <input
-                type="text"
-                id="roomMessageInput"
-                placeholder="Write to your room..."
-                maxlength="1000"
-                autocomplete="off"
-              />
-            </div>
-            <button id="sendRoomMessageButton" type="button">
-              Send to room
-            </button>
-          </div>
-        </aside>
-
-        <section
-          class="panel conversation-panel"
-          aria-labelledby="conversationHeading"
-        >
-          <div class="panel-heading">
-            <p class="section-label">Conversation</p>
-            <h2 id="conversationHeading">Messages</h2>
-            <p class="panel-description">
-              Messages appear here with each sender's name.
-            </p>
-          </div>
-
-          <section class="active-users" aria-labelledby="activeUsersHeading">
+          <section
+            class="active-users chat-only"
+            aria-labelledby="activeUsersHeading"
+          >
             <div class="active-users-heading">
               <h3 id="activeUsersHeading">Active users</h3>
               <span id="activeUsersCount" class="active-users-count">
@@ -616,6 +599,19 @@
               <li class="active-user-empty">Waiting for connection...</li>
             </ul>
           </section>
+        </aside>
+
+        <section
+          class="panel conversation-panel"
+          aria-labelledby="conversationHeading"
+        >
+          <div class="panel-heading">
+            <p class="section-label">Conversation</p>
+            <h2 id="conversationHeading">Messages</h2>
+            <p class="panel-description">
+              Messages appear here with each sender's name.
+            </p>
+          </div>
 
           <div
             id="messages"
@@ -626,7 +622,7 @@
           ></div>
 
           <div class="message-compose">
-            <label for="messageInput">Message everyone</label>
+            <label for="messageInput">Message</label>
             <div class="compose-row">
               <input
                 type="text"
@@ -673,6 +669,7 @@
 
     <script>
       const socket = io();
+      const chatLayout = document.getElementById("chatLayout");
       const userNameInput = document.getElementById("userNameInput");
       const userStatus = document.getElementById("userStatus");
       const messagebox = document.getElementById("messageInput");
@@ -681,14 +678,11 @@
       const joinRoomButton = document.getElementById("joinRoomButton");
       const leaveRoomButton = document.getElementById("leaveRoomButton");
       const roomStatus = document.getElementById("roomStatus");
-      const roomMessageInput = document.getElementById("roomMessageInput");
-      const sendRoomMessageButton = document.getElementById(
-        "sendRoomMessageButton"
-      );
       const messages = document.getElementById("messages");
       const activeUsersList = document.getElementById("activeUsersList");
       const activeUsersCount = document.getElementById("activeUsersCount");
       let roomname = "";
+      let activeUsername = "";
 
       const displayMessage = (username, message) => {
         const messageElement = document.createElement("p");
@@ -701,80 +695,79 @@
         messages.appendChild(messageElement);
       };
 
-      const getUsername = () => {
+      const setChatOpen = (isOpen) => {
+        chatLayout.classList.toggle("is-setup", !isOpen);
+      };
+
+      const joinChat = () => {
         const username = userNameInput.value.trim();
         if (!username) {
-          userStatus.textContent = "Enter your name before sending a message.";
+          userStatus.textContent = "Enter your name before joining.";
           userNameInput.focus();
-          return "";
+          return;
+        }
+
+        const room = roomNameInput.value.trim();
+        if (!room) {
+          roomStatus.textContent = "Enter a room name to join.";
+          roomNameInput.focus();
+          return;
         }
 
         userStatus.textContent = "Your name will appear with your messages.";
+        if (roomname && roomname !== room) socket.emit("leave-room", roomname);
+
+        activeUsername = username;
+        roomname = room;
         socket.emit("set-username", username);
-        return username;
+        socket.emit("join-room", room);
+        roomStatus.textContent = `You are in room ${room}`;
+        setChatOpen(true);
+        messagebox.focus();
       };
 
-      const syncUsername = () => {
-        socket.emit("set-username", userNameInput.value.trim());
-      };
+      joinRoomButton.addEventListener("click", joinChat);
+      userNameInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") joinChat();
+      });
+      roomNameInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") joinChat();
+      });
 
-      userNameInput.addEventListener("change", syncUsername);
-      socket.on("connect", syncUsername);
+      leaveRoomButton.addEventListener("click", () => {
+        if (roomname) socket.emit("leave-room", roomname);
+        roomname = "";
+        activeUsername = "";
+        socket.emit("set-username", "");
+        messages.replaceChildren();
+        roomStatus.textContent = "Enter your name and room name to join";
+        setChatOpen(false);
+      });
+
+      socket.on("connect", () => {
+        if (activeUsername && roomname) {
+          socket.emit("set-username", activeUsername);
+          socket.emit("join-room", roomname);
+        }
+      });
 
       const sendMessage = () => {
-        const username = getUsername();
-        const message = messagebox.value.trim();
-        if (!username || !message) return;
+        if (!activeUsername || !roomname) {
+          setChatOpen(false);
+          return;
+        }
 
-        socket.emit("send-message", { message });
-        displayMessage(username, message);
+        const message = messagebox.value.trim();
+        if (!message) return;
+
+        socket.emit("room-message", { room: roomname, message });
+        displayMessage(activeUsername, message);
         messagebox.value = "";
       };
 
       sendButton.addEventListener("click", sendMessage);
       messagebox.addEventListener("keydown", (event) => {
         if (event.key === "Enter") sendMessage();
-      });
-
-      joinRoomButton.addEventListener("click", () => {
-        const room = roomNameInput.value.trim();
-        if (!room) {
-          roomStatus.textContent = "Enter a room name to join.";
-          return;
-        }
-
-        if (roomname) socket.emit("leave-room", roomname);
-        socket.emit("join-room", room);
-        roomname = room;
-        roomStatus.textContent = `You are in room ${room}`;
-      });
-
-      leaveRoomButton.addEventListener("click", () => {
-        if (!roomname) return;
-
-        socket.emit("leave-room", roomname);
-        roomname = "";
-        roomStatus.textContent = "You are not in any room";
-      });
-
-      const sendRoomMessage = () => {
-        if (!roomname) {
-          roomStatus.textContent = "Join a room before sending a room message.";
-          return;
-        }
-
-        const username = getUsername();
-        const message = roomMessageInput.value.trim();
-        if (!username || !message) return;
-
-        socket.emit("room-message", { room: roomname, message });
-        displayMessage(username, message);
-        roomMessageInput.value = "";
-      };
-
-      sendRoomMessageButton.addEventListener("click", sendRoomMessage);
-      roomMessageInput.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") sendRoomMessage();
       });
 
       socket.on("Message received:", ({ username, message }) => {
