@@ -8,15 +8,13 @@ const normalizeText = (value) => {
 export const setupSocket = (httpServer) => {
   const io = new Server(httpServer);
   const activeUsers = new Map();
-  const guestName = (socket) => `Guest ${socket.id.slice(0, 4)}`;
   const broadcastActiveUsers = () => {
     io.emit("active-users", Array.from(activeUsers.values()));
   };
 
   io.on("connection", (socket) => {
     console.log("A user connected", socket.id);
-    activeUsers.set(socket.id, guestName(socket));
-    broadcastActiveUsers();
+    socket.emit("active-users", Array.from(activeUsers.values()));
 
     socket.on("set-username", (value) => {
       const username = normalizeText(value);
@@ -25,14 +23,24 @@ export const setupSocket = (httpServer) => {
         return;
       }
 
-      const activeName = username || guestName(socket);
-      if (activeUsers.get(socket.id) === activeName) return;
+      if (!username) {
+        if (activeUsers.delete(socket.id)) broadcastActiveUsers();
+        return;
+      }
 
-      activeUsers.set(socket.id, activeName);
+      if (activeUsers.get(socket.id) === username) return;
+
+      activeUsers.set(socket.id, username);
       broadcastActiveUsers();
     });
 
     socket.on("send-message", (payload) => {
+      const username = activeUsers.get(socket.id);
+      if (!username) {
+        socket.emit("chat-error", "Enter your name before sending a message.");
+        return;
+      }
+
       const data = payload && typeof payload === "object" ? payload : {};
       const message = normalizeText(data.message);
 
@@ -42,12 +50,18 @@ export const setupSocket = (httpServer) => {
       }
 
       socket.broadcast.emit("Message received:", {
-        username: activeUsers.get(socket.id),
+        username,
         message,
       });
     });
 
     socket.on("room-message", (payload) => {
+      const username = activeUsers.get(socket.id);
+      if (!username) {
+        socket.emit("chat-error", "Enter your name before sending a message.");
+        return;
+      }
+
       const data = payload && typeof payload === "object" ? payload : {};
       const room = normalizeText(data.room);
       const message = normalizeText(data.message);
@@ -71,7 +85,7 @@ export const setupSocket = (httpServer) => {
       }
 
       socket.to(room).emit("room-message", {
-        username: activeUsers.get(socket.id),
+        username,
         message,
       });
     });
@@ -105,8 +119,7 @@ export const setupSocket = (httpServer) => {
     });
 
     socket.on("disconnect", () => {
-      activeUsers.delete(socket.id);
-      broadcastActiveUsers();
+      if (activeUsers.delete(socket.id)) broadcastActiveUsers();
       console.log("A user disconnected", socket.id);
     });
   });
